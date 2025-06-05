@@ -15,7 +15,6 @@ char_col = db["characters"]
 
 # Constants
 TOTAL_PAGES = 1153
-CHARACTERS_PER_ANIME = 5
 REQUESTS_PER_MIN = 60
 WAIT_TIME = 60
 request_count = 0
@@ -45,9 +44,16 @@ def get_top_anime(page):
     return data['data'] if data and 'data' in data else []
 
 def get_anime_characters(anime_id):
-    url = f"https://api.jikan.moe/v4/anime/{anime_id}/characters"
-    data = get_json(url)
-    return data['data'] if data and 'data' in data else []
+    characters = []
+    page = 1
+    while True:
+        url = f"https://api.jikan.moe/v4/anime/{anime_id}/characters?page={page}"
+        data = get_json(url)
+        if not data or not data.get('data'):
+            break
+        characters.extend(data['data'])
+        page += 1
+    return characters
 
 def get_character_details(char_id):
     url = f"https://api.jikan.moe/v4/characters/{char_id}"
@@ -72,7 +78,7 @@ def main():
                 anime_col.insert_one({"_id": anime_id, "title": anime_title})
                 print(f"📁 Saved anime: {anime_title}")
 
-            characters = get_anime_characters(anime_id)[:CHARACTERS_PER_ANIME]
+            characters = get_anime_characters(anime_id)
             for char in characters:
                 char_data = char['character']
                 char_id = str(char_data['mal_id'])
