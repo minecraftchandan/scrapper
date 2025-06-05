@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 MONGO_URI = os.getenv("MONGO_URI")
 
+# Setup MongoDB connection
 client = MongoClient(MONGO_URI)
 db = client["animeDB"]
 anime_col = db["anime"]
@@ -23,25 +24,23 @@ def rate_limit():
     global request_count
     request_count += 1
     if request_count >= REQUESTS_PER_MIN:
-        print(f"\n⏳ Rate limit hit. Sleeping {WAIT_TIME} sec...\n")
         time.sleep(WAIT_TIME)
         request_count = 0
 
 def get_json(url):
     rate_limit()
     try:
-        res = requests.get(url)
+        res = requests.get(url, timeout=10)
         if res.status_code == 200:
             return res.json()
-        print(f"⚠️ Error {res.status_code}: {url}")
-    except Exception as e:
-        print(f"❌ Request error: {e}")
+    except:
+        pass
     return None
 
 def get_top_anime(page):
     url = f"https://api.jikan.moe/v4/top/anime?page={page}"
     data = get_json(url)
-    return data['data'] if data and 'data' in data else []
+    return data.get('data', []) if data else []
 
 def get_anime_characters(anime_id):
     characters = []
@@ -58,25 +57,20 @@ def get_anime_characters(anime_id):
 def get_character_details(char_id):
     url = f"https://api.jikan.moe/v4/characters/{char_id}"
     data = get_json(url)
-    return data['data'] if data and 'data' in data else {}
+    return data.get('data', {}) if data else {}
 
 def main():
-    print("🚀 Starting scraper for 1153 pages...\n")
     for page in range(1, TOTAL_PAGES + 1):
-        print(f"\n📄 Page {page}/{TOTAL_PAGES}")
         anime_list = get_top_anime(page)
         if not anime_list:
-            print("❌ No anime returned.")
-            break
+            continue
 
         for anime in anime_list:
             anime_id = str(anime['mal_id'])
             anime_title = anime['title']
 
-            # Save anime if not already
             if not anime_col.find_one({"_id": anime_id}):
                 anime_col.insert_one({"_id": anime_id, "title": anime_title})
-                print(f"📁 Saved anime: {anime_title}")
 
             characters = get_anime_characters(anime_id)
             for char in characters:
@@ -84,15 +78,14 @@ def main():
                 char_id = str(char_data['mal_id'])
 
                 if char_col.find_one({"_id": char_id}):
-                    continue  # Skip duplicates
+                    continue
 
                 name = char_data.get('name', 'Unknown')
                 image_url = char_data.get('images', {}).get('jpg', {}).get('image_url', '')
                 role = char.get('role', 'Unknown')
-
                 details = get_character_details(char_id)
-                about = details.get('about') or ''
-                bio = about.strip().replace('\n', ' ') if about else 'No bio'
+
+                bio = details.get('about', 'No bio').strip().replace('\n', ' ')
 
                 char_col.insert_one({
                     "_id": char_id,
@@ -104,9 +97,8 @@ def main():
                     "bio": bio
                 })
 
-                print(f"   ✅ Added character: {name}")
-
-    print("\n✅ Scraping complete!")
+    print("✅ All anime and characters scraped successfully.")
 
 if __name__ == "__main__":
     main()
+
